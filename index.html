@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>سیستم نوبت‌دهی ثبت‌نام دانشجویان</title>
+<style>
+*{box-sizing:border-box;font-family:Vazirmatn,Tahoma,sans-serif}
+body{background:#f4f6fb;margin:0;padding:16px;color:#222}
+.container{max-width:950px;margin:auto}
+.card{background:#fff;border-radius:14px;padding:20px;margin-bottom:16px;box-shadow:0 4px 16px rgba(0,0,0,.07)}
+h1{text-align:center;color:#1a56db}
+h2{color:#1a56db;margin-top:0}
+label{display:block;margin:10px 0 4px;font-weight:bold}
+input,select,button{width:100%;padding:10px;border-radius:8px;border:1px solid #ccc;font-size:15px}
+button{background:#1a56db;color:#fff;border:none;cursor:pointer;margin-top:12px}
+button.secondary{background:#6b7280}
+button.success{background:#059669}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
+th,td{border:1px solid #ddd;padding:6px;text-align:center}
+th{background:#eef2ff}
+.badge{display:inline-block;background:#e0e7ff;color:#1e40af;padding:2px 10px;border-radius:20px;font-size:13px;margin:2px}
+.hidden{display:none}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:600px){.grid{grid-template-columns:1fr}}
+.ticket{border:2px dashed #1a56db;padding:14px;border-radius:12px;text-align:center;background:#f8faff}
+.full{color:#dc2626;font-weight:bold}
+.ok{color:#059669}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="card">
+<h1>سیستم نوبت‌دهی ثبت‌نام دانشجویان</h1>
+<div id="conn" style="text-align:center;font-size:13px">در حال اتصال...</div>
+<div id="stats" style="text-align:center;margin-top:8px"></div>
+</div>
+<div class="card">
+<h2>ظرفیت همه رشته‌ها در هر دو روز</h2>
+<div style="overflow:auto"><table id="publicTable"></table></div>
+</div>
+<div class="card">
+<h2>دریافت نوبت آنلاین</h2>
+<label>نام و نام خانوادگی</label>
+<input id="name" placeholder="مثلاً زهرا محمدی">
+<div class="grid">
+<div><label>کد ملی</label><input id="code" inputmode="numeric"></div>
+<div><label>شماره موبایل</label><input id="phone" inputmode="numeric"></div>
+</div>
+<label>رشته و پردیس</label>
+<select id="field"></select>
+<label>روز مراجعه</label>
+<select id="day"><option value="1">روز اول</option><option value="2">روز دوم</option></select>
+<button onclick="reserve()">ثبت نوبت و دریافت کد</button>
+<div id="ticket" class="hidden ticket" style="margin-top:12px"></div>
+</div>
+<div class="card">
+<h2>ورود مدیر</h2>
+<label>رمز مدیر</label>
+<input id="pass" type="password">
+<div class="grid">
+<button onclick="login()">ورود به پنل مدیریت</button>
+<button class="secondary" onclick="document.getElementById('admin').classList.add('hidden')">بستن پنل</button>
+</div>
+</div>
+<div class="card hidden" id="admin">
+<h2>پنل مدیریت</h2>
+<button class="success" onclick="exportCSV()">دانلود خروجی اکسل (CSV)</button>
+<div style="overflow:auto"><table id="capTable"></table></div>
+<h3>لیست ثبت‌نام‌شدگان (<span id="count">0</span>)</h3>
+<div style="overflow:auto"><table id="listTable"></table></div>
+<h3>افزایش ظرفیت</h3>
+<div class="grid"><select id="eField"></select><select id="eDay"><option value="1">روز ۱</option><option value="2">روز ۲</option></select></div>
+<label>سقف جدید</label><input id="eCap" type="number" min="1">
+<button onclick="updateCap()">اعمال ظرفیت جدید برای همه</button>
+</div>
+</div>
+<script>
+var FIELDS=[
+{n:"پرستاری شهرکرد",desk:"میز ۱ و ۲",cap:[50,50]},
+{n:"پزشکی شهرکرد",desk:"میز ۶ و ۷",cap:[100,100]},
+{n:"فوریت پزشکی بروجن",desk:"میز ۸ و ۹",cap:[25,25]},
+{n:"پرستاری بروجن",desk:"میز ۸ و ۹",cap:[25,25]},
+{n:"اتاق عمل شهرکرد",desk:"میز ۱ و ۲",cap:[13,12]},
+{n:"مامایی شهرکرد",desk:"میز ۱ و ۲",cap:[13,12]},
+{n:"بهداشت عمومی شهرکرد",desk:"میز ۳",cap:[13,12]},
+{n:"بهداشت محیط شهرکرد",desk:"میز ۳",cap:[13,12]},
+{n:"بهداشت مدارس شهرکرد",desk:"میز ۳",cap:[13,12]},
+{n:"بهداشت حرفه‌ای شهرکرد",desk:"میز ۳",cap:[13,12]},
+{n:"هوشبری شهرکرد",desk:"میز ۴ و ۵",cap:[13,12]},
+{n:"فیزیوتراپی شهرکرد",desk:"میز ۴ و ۵",cap:[13,12]},
+{n:"رادیولوژی شهرکرد",desk:"میز ۴ و ۵",cap:[13,12]},
+{n:"علوم آزمایشگاهی شهرکرد",desk:"میز ۴ و ۵",cap:[13,12]},
+{n:"دندانپزشکی شهرکرد",desk:"میز ۶ و ۷",cap:[13,12]},
+{n:"اتاق عمل بروجن",desk:"میز ۸ و ۹",cap:[13,12]},
+{n:"بهداشت عمومی بروجن",desk:"میز ۸ و ۹",cap:[13,12]}
+];
+var PREFIX={1:"A",2:"B"};
+var caps=FIELDS.map(function(f){return [f.cap[0],f.cap[1]];});
+var records=[];
+function initOptions(){
+var fs=document.getElementById("field"),es=document.getElementById("eField");
+fs.innerHTML="";es.innerHTML="";
+FIELDS.forEach(function(f,i){
+fs.innerHTML+='<option value="'+i+'">'+f.n+' — '+f.desk+'</option>';
+es.innerHTML+='<option value="'+i+'">'+f.n+'</option>';
+});
+}
+function countUsed(fi,di){return records.filter(function(r){return Number(r.field)==fi && Number(r.day)==di;}).length;}
+function leftOf(fi,di){return caps[fi][di]-countUsed(fi,di);}
+function renderStats(){
+var t1=caps.reduce(function(s,c){return s+c[0];},0);
+var t2=caps.reduce(function(s,c){return s+c[1];},0);
+var c1=records.filter(function(r){return Number(r.day)==1;}).length;
+var c2=records.filter(function(r){return Number(r.day)==2;}).length;
+document.getElementById("stats").innerHTML='<span class="badge">روز ۱: '+c1+' / '+t1+'</span> <span class="badge">روز ۲: '+c2+' / '+t2+'</span> <span class="badge">جمع: '+records.length+'</span>';
+}
+function renderPublic(){
+var h="<tr><th>رشته</th><th>میز</th><th>روز اول</th><th>روز دوم</th></tr>";
+FIELDS.forEach(function(f,i){
+function cell(d){var l=leftOf(i,d);return l<=0?'<span class="full">تکمیل</span>':'<span class="ok">'+l+' خالی</span> از '+caps[i][d];}
+h+="<tr><td>"+f.n+"</td><td>"+f.desk+"</td><td>"+cell(0)+"</td><td>"+cell(1)+"</td></tr>";
+});
+document.getElementById("publicTable").innerHTML=h;
+}
+function dsChange(){renderStats();renderPublic();}
+async function loadAll(){
+try{
+var r=await fetch("/api/bookings",{cache:"no-store"});
+if(!r.ok) throw new Error("HTTP "+r.status);
+records=await r.json();
+if(!Array.isArray(records)) records=[];
+document.getElementById("conn").innerHTML='<span class="ok">متصل ✅</span>';
+try{
+var rc=await fetch("/api/bookings?type=caps",{cache:"no-store"});
+if(rc.ok){var cc=await rc.json();if(Array.isArray(cc)&&cc.length==FIELDS.length){caps=cc;}}
+}catch(e){}
+}catch(e){
+document.getElementById("conn").innerHTML='<span class="full">API ساخته نشده — فایل api/bookings.js را بسازید و Redeploy کنید</span>';
+}
+dsChange();
+if(!document.getElementById("admin").classList.contains("hidden")) renderAdmin();
+}
+async function reserve(){
+var name=document.getElementById("name").value.trim();
+var code=document.getElementById("code").value.trim();
+var phone=document.getElementById("phone").value.trim();
+var fi=Number(document.getElementById("field").value);
+var di=Number(document.getElementById("day").value);
+if(!name||!code||!phone){alert("نام، کد ملی و موبایل الزامی است.");return;}
+document.getElementById("ticket").classList.add("hidden");
+try{
+var r=await fetch("/api/bookings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:name,code:code,phone:phone,field:fi,day:di,desk:FIELDS[fi].desk})});
+var txt=await r.text();
+var data=null;try{data=JSON.parse(txt);}catch(e){}
+if(!r.ok){alert(txt||"خطا در ثبت");return;}
+var nobat=(data&&data.nobat)?data.nobat:txt;
+await loadAll();
+var t=document.getElementById("ticket");t.classList.remove("hidden");
+t.innerHTML="<h3>نوبت شما ثبت شد ✅</h3><p>نام: <b>"+name+"</b></p><p>رشته: <b>"+FIELDS[fi].n+"</b></p><p>روز: <b>"+(["اول","دوم"][di-1])+"</b> | "+FIELDS[fi].desk+"</p><p>شماره نوبت: <b style='font-size:28px'>"+nobat+"</b></p>";
+}catch(e){alert("خطای اتصال: "+e.message);}
+}
+function login(){
+if(document.getElementById("pass").value==="admin123"){document.getElementById("admin").classList.remove("hidden");renderAdmin();}
+else alert("رمز اشتباه است.");
+}
+function renderAdmin(){
+var ht="<tr><th>رشته</th><th>روز۱</th><th>روز۲</th><th>میز</th></tr>";
+FIELDS.forEach(function(f,i){ht+="<tr><td>"+f.n+"</td><td>"+countUsed(i,0)+" / "+caps[i][0]+"</td><td>"+countUsed(i,1)+" / "+caps[i][1]+"</td><td>"+f.desk+"</td></tr>";});
+document.getElementById("capTable").innerHTML=ht;
+var sorted=[...records].sort(function(a,b){return Number(a.day)-Number(b.day)||String(a.nobat).localeCompare(String(b.nobat));});
+var lt="<tr><th>شماره نوبت</th><th>نام</th><th>کدملی</th><th>موبایل</th><th>رشته</th><th>روز</th><th>میز</th></tr>";
+sorted.forEach(function(rr){lt+="<tr><td><b>"+(rr.nobat||"")+"</b></td><td>"+(rr.name||"")+"</td><td>"+(rr.code||"")+"</td><td>"+(rr.phone||"")+"</td><td>"+(FIELDS[rr.field]?FIELDS[rr.field].n:rr.field)+"</td><td>"+rr.day+"</td><td>"+(rr.desk||"")+"</td></tr>";});
+document.getElementById("listTable").innerHTML=lt;
+document.getElementById("count").innerText=records.length;
+renderStats();
+}
+function exportCSV(){
+var sorted=[...records].sort(function(a,b){return Number(a.day)-Number(b.day)||String(a.nobat).localeCompare(String(b.nobat));});
+var csv="﻿شماره نوبت,نام,کدملی,موبایل,رشته,روز,میز\n";
+sorted.forEach(function(rr){csv+= (rr.nobat||"")+","+(rr.name||"")+","+(rr.code||"")+","+(rr.phone||"")+","+(FIELDS[rr.field]?FIELDS[rr.field].n:rr.field)+","+rr.day+","+(rr.desk||"")+"\n";});
+var b=new Blob([csv],{type:"text/csv;charset=utf-8"});
+var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="nobat.csv";a.click();
+}
+async function updateCap(){
+var fi=Number(document.getElementById("eField").value);
+var di=Number(document.getElementById("eDay").value);
+var v=Number(document.getElementById("eCap").value);
+if(!v||v<1){alert("عدد معتبر وارد کنید.");return;}
+caps[fi][di-1]=v;
+try{await fetch("/api/bookings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({type:"caps",caps:caps})});}catch(e){}
+dsChange();renderAdmin();alert("ظرفیت برای همه به‌روز شد.");
+}
+initOptions();dsChange();loadAll();
+</script>
+</body>
+</html>
